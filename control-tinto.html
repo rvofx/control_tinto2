@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Tinto</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body { background:#e9ecef; padding-bottom:40px; }
+  .contenedor { max-width:480px; margin:0 auto; padding:20px 16px; }
+  #scannerModal { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:1050; display:none; }
+  #scannerBox { max-width:420px; margin:60px auto; background:#fff; padding:16px; border-radius:12px; }
+  #qr-reader { width:100%; }
+  .spinner-wrap { text-align:center; padding:30px 0; }
+</style>
+</head>
+<body>
+
+<div class="contenedor">
+  <h1 class="text-center mb-4">Control Tinto</h1>
+
+  <div class="card p-3 shadow-sm mb-3">
+    <div class="mb-3">
+      <label class="form-label">Código de Usuario</label>
+      <input id="inputUsuario" type="text" class="form-control" inputmode="numeric">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Partida / Código QR</label>
+      <div class="input-group">
+        <input id="inputPartida" type="text" class="form-control">
+        <button class="btn btn-outline-secondary" type="button" onclick="abrirScanner()">📷 Scan</button>
+      </div>
+    </div>
+    <button class="btn btn-primary w-100" type="button" onclick="consultar()">Consultar</button>
+  </div>
+
+  <div id="resultados"></div>
+</div>
+
+<!-- Modal del escáner -->
+<div id="scannerModal">
+  <div id="scannerBox">
+    <div id="qr-reader"></div>
+    <button class="btn btn-secondary w-100 mt-3" type="button" onclick="cerrarScanner()">Cancelar</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/[email protected]/html5-qrcode.min.js"></script>
+<script>
+// =========================================================================
+// CONFIGURACIÓN: cambia esta URL cuando pases de pruebas a producción.
+// Hoy apunta al workflow de PRUEBA (V4 / taller-control-v2).
+// Cuando lo valides, cámbiala por la ruta de producción real.
+// =========================================================================
+const WEBHOOK_URL = 'https://n8n.garmenttradingsac.com/webhook/taller-control-v2';
+
+let html5QrCode = null;
+
+// ---- Escáner de cámara ----
+function abrirScanner() {
+  document.getElementById('scannerModal').style.display = 'block';
+  html5QrCode = new Html5Qrcode("qr-reader");
+  html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 240 },
+    (decodedText) => {
+      document.getElementById('inputPartida').value = decodedText;
+      cerrarScanner();
+    },
+    () => { /* frames sin QR detectado: ignorar */ }
+  ).catch((err) => {
+    alert('No se pudo acceder a la cámara: ' + err);
+    cerrarScanner();
+  });
+}
+
+function cerrarScanner() {
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+  }
+  document.getElementById('scannerModal').style.display = 'none';
+}
+
+// ---- Llamada al webhook ----
+async function llamarWebhook(payload) {
+  document.getElementById('resultados').innerHTML =
+    '<div class="spinner-wrap"><div class="spinner-border text-primary"></div></div>';
+  try {
+    const resp = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    document.getElementById('resultados').innerHTML = data.html || '';
+  } catch (err) {
+    document.getElementById('resultados').innerHTML =
+      '<div class="alert alert-danger">No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.</div>';
+  }
+}
+
+function consultar() {
+  const usuario = document.getElementById('inputUsuario').value.trim();
+  const partida = document.getElementById('inputPartida').value.trim();
+  if (!usuario || !partida) {
+    alert('Ingresa código de usuario y partida.');
+    return;
+  }
+  window._usuario = usuario;
+  window._partida = partida;
+  llamarWebhook({ action: 'consultar', usuario, partida });
+}
+
+// Estas funciones son llamadas por los botones dentro del HTML que devuelve n8n
+// (los onclick="cerrarProceso(...)" etc. vienen embebidos en la tabla de resultados).
+window.iniciarProceso = function (rutaId, procesoId) {
+  if (!confirm('¿Confirmar inicio del proceso?')) return;
+  enviarAccion('iniciar', rutaId, procesoId);
+};
+
+window.cerrarProceso = function (rutaId, procesoId) {
+  if (!confirm('¿Confirmar cierre del proceso?')) return;
+  enviarAccion('cerrar', rutaId, procesoId);
+};
+
+window.revertirProceso = function (rutaId, procesoId) {
+  if (!confirm('⚠️ ¿Seguro que desea REABRIR este proceso?')) return;
+  enviarAccion('revertir', rutaId, procesoId);
+};
+
+async function enviarAccion(accion, rutaId, procesoId) {
+  await llamarWebhook({
+    action: accion,
+    rutaId, procesoId,
+    usuario: window._usuario,
+    partida: window._partida
+  });
+  // Tras iniciar/cerrar/revertir, refrescamos la tabla automáticamente
+  setTimeout(consultar, 600);
+}
+
+// El botón "Refrescar" que viene embebido en el HTML de n8n llama a enviarDatos()
+window.enviarDatos = function () { consultar(); };
+
+// Cualquier <form> que venga embebido en el HTML de n8n (p. ej. el mensaje de
+// éxito con botón "Continuar") se intercepta para no recargar la página.
+document.addEventListener('submit', function (e) {
+  e.preventDefault();
+  consultar();
+});
+</script>
+
+</body>
+</html>
