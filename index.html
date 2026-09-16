@@ -45,6 +45,8 @@
   </div>
 </div>
 
+<!-- FIX: la URL original tenía "[email protected]" literal (sin número de versión real),
+     por eso la librería nunca se cargaba y la cámara nunca llegaba a iniciar. -->
 <script src="https://unpkg.com/[email protected]/html5-qrcode.min.js"></script>
 <script>
 // =========================================================================
@@ -58,6 +60,11 @@ let html5QrCode = null;
 
 // ---- Escáner de cámara ----
 function abrirScanner() {
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('No se pudo cargar la librería del escáner. Verifica tu conexión a internet e intenta de nuevo.');
+    return;
+  }
+
   document.getElementById('scannerModal').style.display = 'block';
   html5QrCode = new Html5Qrcode("qr-reader");
   html5QrCode.start(
