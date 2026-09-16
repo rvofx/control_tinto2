@@ -45,9 +45,10 @@
   </div>
 </div>
 
-<!-- FIX: la URL original tenía "[email protected]" literal (sin número de versión real),
-     por eso la librería nunca se cargaba y la cámara nunca llegaba a iniciar. -->
-<script src="https://unpkg.com/[email protected]/html5-qrcode.min.js"></script>
+<!-- FIX: la URL anterior no era válida (tenía "@" sin versión real o apuntaba
+     a un paquete/CDN que no resolvía), por eso Html5Qrcode nunca quedaba definido.
+     Esta es una URL real y verificada de cdnjs. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" onerror="window._qrLibFailed = true;"></script>
 <script>
 // =========================================================================
 // CONFIGURACIÓN: cambia esta URL cuando pases de pruebas a producción.
@@ -61,7 +62,11 @@ let html5QrCode = null;
 // ---- Escáner de cámara ----
 function abrirScanner() {
   if (typeof Html5Qrcode === 'undefined') {
-    alert('No se pudo cargar la librería del escáner. Verifica tu conexión a internet e intenta de nuevo.');
+    if (window._qrLibFailed) {
+      alert('No se pudo descargar la librería del escáner desde el CDN (cdnjs.cloudflare.com). Revisa si tu red/wifi bloquea ese dominio, o prueba con datos móviles.');
+    } else {
+      alert('La librería del escáner aún no terminó de cargar. Espera unos segundos y presiona Scan de nuevo.');
+    }
     return;
   }
 
